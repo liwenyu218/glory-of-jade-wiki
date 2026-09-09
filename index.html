@@ -1,0 +1,1708 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>璟和wiki</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23fdf2e0'/><text x='32' y='48' text-anchor='middle' font-size='40'>🏠</text></svg>"
+    />
+    <script src="./vendor/vue.global.prod.js"></script>
+    <script src="./vendor/marked.min.js"></script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <script src="./quiz-data.js"></script>
+    <script src="./version-data.js"></script>
+    <div id="app">
+      <!-- 密码门禁 -->
+      <div v-if="!authenticated" class="gate-overlay">
+        <div class="gate-card">
+          <div class="gate-emoji">🏠</div>
+          <h1 class="gate-title">美邻装修笔记</h1>
+          <p class="gate-sub">邦泰 · 璟和业主交流群</p>
+          <input
+            class="gate-input"
+            type="password"
+            v-model="passwordInput"
+            placeholder="请输入访问密码"
+            @keyup.enter="handleLogin"
+            autofocus
+          />
+          <div class="gate-error">{{ passwordError }}</div>
+          <button class="gate-btn" @click="handleLogin">进入 Wiki</button>
+        </div>
+      </div>
+
+      <template v-if="authenticated">
+        <template v-if="currentContent === null">
+          <div class="top-btns">
+            <!-- 作者碎碎念按钮 -->
+            <button class="author-btn" @click="showAuthorModal = true">
+              📝 作者碎碎念
+            </button>
+            <!-- 数据来源按钮 -->
+            <button class="source-btn" @click="showSourceModal = true">
+              📊 Wiki 数据来源
+            </button>
+            <!-- 打赏按钮 -->
+            <button class="donate-btn" @click="showDonateModal = true">
+              ☕ 请作者喝杯咖啡
+            </button>
+            <!-- 承重墙开槽警示按钮（重大风险） -->
+            <button class="safety-btn" @click="showSafetyModal = true">
+              <span class="safety-icon"></span>
+              ⚠️ 承重墙开槽警示
+            </button>
+          </div>
+        </template>
+
+        <div class="wrap">
+          <!-- 列表态：卡片视图 -->
+          <template v-if="currentContent === null">
+            <header>
+              <div class="eyebrow">邦泰 · 璟和业主交流群</div>
+              <h1>美邻装修笔记</h1>
+              <div class="updated-tag">最近更新 · {{ manifest.updated }}</div>
+            </header>
+
+            <div class="segmented">
+              <div class="segmented-inner">
+                <button
+                  class="seg"
+                  :class="{active: tab==='daily'}"
+                  @click="tab='daily'"
+                >
+                  每日整理
+                </button>
+                <button
+                  class="seg"
+                  :class="{active: tab==='knowledge'}"
+                  @click="tab='knowledge'"
+                >
+                  装修知识库
+                </button>
+                <!-- 团购页签暂时关闭（2026-08-26：近期未维护团购页，隐藏入口，待重新维护时改 v-if="true"） -->
+                <button
+                  v-if="false"
+                  class="seg"
+                  :class="{active: tab==='groupbuy'}"
+                  @click="tab='groupbuy'"
+                >
+                  装修团购
+                </button>
+              </div>
+            </div>
+
+            <div v-if="tab==='daily' || tab==='knowledge'" class="hint-bar">
+              <span class="dot"></span>
+              <span v-if="tab==='daily'"
+                >点击日期卡片查看当天的装修相关与闲聊八卦整理</span
+              >
+              <span v-else-if="tab==='knowledge'"
+                >点击主题卡片查看累积的装修知识，知识库随每日群聊持续更新</span
+              >
+            </div>
+
+            <!-- 装修全程地图入口 -->
+            <button v-if="false" class="top10-card" @click="loadTop10">
+              <div class="top10-text">
+                <span class="top10-emoji">🗺️</span>
+                <div>
+                  <div class="top10-title">装修全程地图</div>
+                  <div class="top10-sub">
+                    新手入口 · 装修路线图 + 避坑速查
+                  </div>
+                </div>
+              </div>
+              <span class="top10-arrow">›</span>
+            </button>
+
+            <!-- 趣味测试入口 -->
+            <button v-if="tab==='daily'" class="quiz-card" @click="startQuiz">
+              <div class="quiz-text">
+                <span class="quiz-emoji">🔮</span>
+                <div>
+                  <div class="quiz-title">测测你的装修人格</div>
+                  <div class="quiz-sub">
+                    6 道题 · 看看你更像群里的哪种装修达人
+                  </div>
+                </div>
+              </div>
+              <span class="quiz-arrow">›</span>
+            </button>
+
+            <!-- 每日整理：搜索框 -->
+            <div v-if="tab==='daily'" class="groupbuy-search">
+              <input
+                v-model="dailyQuery"
+                type="text"
+                class="groupbuy-search-input"
+                placeholder="🔍 搜索日期 / 关键词（如 8月22日、承重墙、燃气、空调…）"
+              />
+              <button
+                v-if="dailyQuery"
+                class="groupbuy-search-clear"
+                @click="dailyQuery = ''"
+              >
+                ✕
+              </button>
+            </div>
+            <!-- 每日整理：搜索结果 -->
+            <div v-if="tab==='daily' && dailyQuery.trim() !== ''" class="grid">
+              <div v-if="searchLoading" class="groupbuy-search-empty">
+                <div class="big-icon">⏳</div>
+                <div class="hint-text">正在搜索…</div>
+              </div>
+              <template v-else-if="dailyResults.length > 0">
+                <div
+                  v-for="d in dailyResults"
+                  :key="d.date"
+                  class="card daily-card"
+                >
+                  <div>
+                    <span class="date">{{ d.date }}</span>
+                    <span class="weekday">{{ d.weekday }}</span>
+                  </div>
+                  <div class="meta">{{ d.message_count }} 条消息</div>
+                  <div class="btns">
+                    <button
+                      class="daily-btn"
+                      @click="loadDailyWithHighlight(d, 'renovation')"
+                    >
+                      <span
+                        ><span style="margin-right: 6px">🔨</span>装修相关</span
+                      >
+                      <span class="arrow">›</span>
+                    </button>
+                    <button
+                      class="daily-btn"
+                      @click="loadDailyWithHighlight(d, 'gossip')"
+                    >
+                      <span
+                        ><span style="margin-right: 6px">🎭</span>闲聊八卦</span
+                      >
+                      <span class="arrow">›</span>
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="groupbuy-search-empty">
+                <div class="big-icon">🔍</div>
+                <div class="hint-text">
+                  未找到匹配「{{ dailyQuery }}」的每日整理，换个关键词试试
+                </div>
+              </div>
+            </div>
+            <!-- 每日整理（非搜索态） -->
+            <div v-if="tab==='daily' && dailyQuery.trim() === ''" class="grid">
+              <div v-for="d in displayDailyList" :key="d.date" class="card daily-card">
+                <div>
+                  <span class="date">{{ d.date }}</span>
+                  <span class="weekday">{{ d.weekday }}</span>
+                </div>
+                <div class="meta">{{ d.message_count }} 条消息</div>
+                <div class="btns">
+                  <button
+                    class="daily-btn"
+                    @click="loadContent(d.renovation, '装修相关 · ' + d.date, '#/daily/' + d.date)"
+                  >
+                    <span
+                      ><span style="margin-right: 6px">🔨</span>装修相关</span
+                    >
+                    <span class="arrow">›</span>
+                  </button>
+                  <button class="daily-btn" @click="handleGossip(d)">
+                    <span
+                      ><span style="margin-right: 6px">🎭</span>闲聊八卦</span
+                    >
+                    <span class="arrow">›</span>
+                  </button>
+                </div>
+              </div>
+              <div v-if="dailyList.length===0" class="empty">
+                <div class="big-icon">📭</div>
+                <div class="hint-text">
+                  还没有每日整理，把群聊记录放进 RAW/ 后让 AI 处理
+                </div>
+              </div>
+            </div>
+            <!-- 每日整理：展开/收起更多 -->
+            <div v-if="dailyHasMore && tab==='daily'" class="daily-more">
+              <button class="daily-more-btn" @click="dailyShowAll = !dailyShowAll">
+                <span>{{ dailyShowAll ? "收起" : "查看全部" }}</span>
+                <span class="daily-more-arrow">{{ dailyShowAll ? "▲" : "▼" }}</span>
+              </button>
+            </div>
+
+            <!-- 装修知识库：搜索框 -->
+            <div v-if="tab==='knowledge'" class="groupbuy-search">
+              <input
+                v-model="knowledgeQuery"
+                type="text"
+                class="groupbuy-search-input"
+                placeholder="🔍 搜索主题 / 关键词（如 燃气、空调、预算、全屋定制…）"
+              />
+              <button
+                v-if="knowledgeQuery"
+                class="groupbuy-search-clear"
+                @click="knowledgeQuery = ''"
+              >
+                ✕
+              </button>
+            </div>
+            <!-- 装修知识库：搜索结果 -->
+            <div v-if="tab==='knowledge' && knowledgeQuery.trim() !== ''" class="grid">
+              <div v-if="searchLoading" class="groupbuy-search-empty">
+                <div class="big-icon">⏳</div>
+                <div class="hint-text">正在搜索…</div>
+              </div>
+              <template v-else-if="knowledgeResults.length > 0">
+                <div
+                  v-for="k in knowledgeResults"
+                  :key="k.id"
+                  class="card"
+                  @click="loadKnowledgeWithHighlight(k)"
+                >
+                  <div class="icon">{{ k.icon }}</div>
+                  <div class="title">{{ k.title }}</div>
+                  <div class="tags">
+                    <span v-for="t in k.tags" :key="t" class="tag">{{ t }}</span>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="groupbuy-search-empty">
+                <div class="big-icon">🔍</div>
+                <div class="hint-text">
+                  未找到匹配「{{ knowledgeQuery }}」的知识主题，换个关键词试试
+                </div>
+              </div>
+            </div>
+            <!-- 装修知识库（非搜索态） -->
+            <div v-if="tab==='knowledge' && knowledgeQuery.trim() === ''" class="grid">
+              <div
+                v-for="k in knowledgeList"
+                :key="k.id"
+                class="card"
+                @click="loadContent(k.path, k.title, '#/knowledge/' + k.id)"
+              >
+                <div class="icon">{{ k.icon }}</div>
+                <div class="title">{{ k.title }}</div>
+                <div class="tags">
+                  <span v-for="t in k.tags" :key="t" class="tag">{{ t }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 装修团购：搜索 + 总览入口 + 进行中 + 品类卡片 -->
+            <template v-if="tab==='groupbuy'">
+              <!-- 团购搜索框 -->
+              <div class="groupbuy-search">
+                <input
+                  v-model="groupBuyQuery"
+                  type="text"
+                  class="groupbuy-search-input"
+                  placeholder="🔍 搜索品牌 / 型号 / 关键词（如 格力、冰箱、小天鹅小乌梅）"
+                />
+                <button
+                  v-if="groupBuyQuery"
+                  class="groupbuy-search-clear"
+                  @click="groupBuyQuery = ''"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <!-- 团购总览大入口 -->
+              <button class="top10-card" @click="loadGroupBuyOverview">
+                <div class="top10-text">
+                  <span class="top10-emoji">🛒</span>
+                  <div>
+                    <div class="top10-title">团购总览</div>
+                    <div class="top10-sub">
+                      一页看全 22 个团购 · 进行中 + 全品类价目 + 参团攻略
+                    </div>
+                  </div>
+                </div>
+                <span class="top10-arrow">›</span>
+              </button>
+
+              <!-- 进行中的团购（精简版）—— 暂时隐藏，如需恢复将 v-if="false" 改为 v-if="true" -->
+              <div class="groupbuy-active" v-if="false">
+                <div class="groupbuy-active-title">
+                  <span class="dot"></span>
+                  🔴 进行中的团购（点击品类卡片查看详情）
+                </div>
+                <div class="groupbuy-active-list">
+                  <div
+                    v-for="(g, gi) in activeGroupBuy"
+                    :key="gi"
+                    class="groupbuy-active-item"
+                    @click="loadContent(g.path, g.title, '#/groupbuy/' + g.id)"
+                  >
+                    <span class="gb-status">{{ g.status }}</span>
+                    <span class="gb-name">{{ g.name }}</span>
+                    <span class="gb-arrow">›</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 各品类团购卡片（搜索时显示结果，空搜索显示全部） -->
+              <div class="grid" v-if="groupBuyQuery.trim() === ''">
+                <div
+                  v-for="g in groupBuyList"
+                  :key="g.id"
+                  class="card"
+                  @click="loadContent(g.path, g.title, '#/groupbuy/' + g.id)"
+                >
+                  <div class="icon">{{ g.icon }}</div>
+                  <div class="title">{{ g.title }}</div>
+                  <div class="tags">
+                    <span v-for="t in g.tags" :key="t" class="tag">{{ t }}</span>
+                  </div>
+                </div>
+              </div>
+              <!-- 搜索中 -->
+              <div v-else-if="searchLoading" class="groupbuy-search-empty">
+                <div class="big-icon">⏳</div>
+                <div class="hint-text">正在搜索…</div>
+              </div>
+              <!-- 搜索结果（点击跳转到文档对应位置并高亮） -->
+              <div v-else-if="groupBuyResults.length > 0" class="grid">
+                <div
+                  v-for="g in groupBuyResults"
+                  :key="g.id"
+                  class="card"
+                  @click="loadGroupBuyWithHighlight(g)"
+                >
+                  <div class="icon">{{ g.icon }}</div>
+                  <div class="title">{{ g.title }}</div>
+                  <div class="tags">
+                    <span v-for="t in g.tags" :key="t" class="tag">{{ t }}</span>
+                  </div>
+                  <div class="gb-match-hint">
+                    命中 {{ g.matchCount }} 个词：{{ g.matchTerms.join("、") }}
+                  </div>
+                </div>
+              </div>
+              <!-- 搜索无结果提示 -->
+              <div v-else class="groupbuy-search-empty">
+                <div class="big-icon">🔍</div>
+                <div class="hint-text">未找到匹配「{{ groupBuyQuery }}」的团购，换个关键词试试</div>
+              </div>
+            </template>
+
+            <!-- 打赏区 -->
+            <!-- <div class="donate">
+            <div class="donate-card">
+              <div class="donate-qr">
+                <img src="Thank.png" alt="收款码" />
+              </div>
+              <div class="donate-text">
+                <p class="donate-title">🍃 随缘打赏</p>
+                <p class="donate-sub">
+                  赏不赏都行，讲究一个缘分。<br />
+                  有缘人是真爱，无缘人是白嫖——白嫖也是爱。
+                </p>
+                <p class="donate-hint">扫码打赏 · 金额随心 · 功德+1</p>
+              </div>
+            </div>
+          </div> -->
+
+            <footer>
+              <p>由 DeepSeek-V4-Pro 基于群聊记录整理维护</p>
+            </footer>
+          </template>
+
+          <!-- 文章态：阅读视图 -->
+          <article v-else class="article-view">
+            <div class="article-bar">
+              <div class="article-bar-inner">
+                <button class="back-btn" @click="backToList">
+                  <span class="back-arrow">‹</span> 返回
+                </button>
+                <div class="article-title">{{ currentTitle }}</div>
+              </div>
+            </div>
+            <div class="article-body" v-html="currentContent" @click="handleArticleClick"></div>
+          </article>
+
+          <!-- 图片查看弹窗 -->
+          <transition name="modal">
+            <div
+              v-if="showImgModal"
+              class="img-modal-mask"
+              @click="closeImgModal"
+            >
+              <div class="img-modal-card" @click.stop>
+                <button class="img-modal-close" @click="closeImgModal">✕</button>
+                <img :src="imgModalSrc" alt="查看图片" class="img-modal-content" />
+              </div>
+            </div>
+          </transition>
+
+          <!-- 八卦弹窗 -->
+          <transition name="modal">
+            <div
+              v-if="showGossipModal"
+              class="modal-mask"
+              @click="showGossipModal = false"
+            >
+              <div class="modal-card" @click.stop>
+                <div class="modal-emoji">🎭</div>
+                <h2 class="modal-title">群内限定</h2>
+                <p class="modal-desc">
+                  想知道群友们的金句、封神之战和那些不能说的秘闻？<br />
+                  八卦涉及群友日常互动，<strong>暂不对外公开</strong>。
+                </p>
+                <p class="modal-sub">保护邻里隐私，八卦只在群内流通～</p>
+                <div class="modal-btns">
+                  <button
+                    class="modal-btn primary"
+                    @click="showGossipModal = false"
+                  >
+                    表示理解
+                  </button>
+                  <button class="modal-btn" @click="showGossipModal = false">
+                    残忍拒绝
+                  </button>
+                </div>
+              </div>
+            </div>
+          </transition>
+
+          <!-- 作者碎碎念弹窗 -->
+          <transition name="modal">
+            <div
+              v-if="showAuthorModal"
+              class="author-modal-mask"
+              @click="showAuthorModal = false"
+            >
+              <div class="author-modal-card" @click.stop>
+                <p class="author-modal-salute">致各位邦泰美邻：</p>
+                <div class="author-modal-body">
+                  <p>展信佳。</p>
+                  <p>
+                    这个 Wiki
+                    的诞生，源自一个简单的想法——每天群里成百上千条消息，藏着太多宝贵的信息，但转眼就被刷走了。于是我想，能不能把它们沉淀下来，变成一本大家可以随时翻阅的「装修笔记」。
+                  </p>
+                  <p>
+                    本 Wiki 的维护目的很简单：<span class="highlight"
+                      >汇聚大家装修路上的小智慧，帮助每一位邻居在装修中少踩坑、少花冤枉钱。</span
+                    >从验房到封窗，从空调到卫浴，每一处细节都是群友们用真金白银换来的经验，值得被记住、被传递。
+                  </p>
+                  <p>
+                    同时，这本 Wiki
+                    也算是一本日记，记录着我们邻里生活的点滴——从停车费维权的群情激昂，到疯狂星期四的嬉笑怒骂，从武将文臣的角色扮演，到璟萱语录的集体解构。这些烟火气，是邦泰这个大家庭最真实的样子。
+                  </p>
+                  <p>
+                    希望未来的日子，大家在邦泰的日子像毛坯变精装一样，一点点亮堂起来，有酒有肉有朋友
+                    🏘️🥂
+                  </p>
+                  <hr class="author-modal-divider" />
+                  <p>
+                    本 Wiki
+                    的内容都来自大家在群里的日常分享，我把这些聊天记录整理成了笔记，方便查阅。如果有邻居觉得某些内容不想被收录，<span
+                      class="highlight"
+                      >随时私聊我，我会第一时间删掉</span
+                    >。尊重每一位邻居的意愿，比整理知识更重要。
+                  </p>
+                  <p>
+                    需要说明的是，本 Wiki 由 AI
+                    基于群聊记录整理生成，虽然尽力保证准确，但 AI
+                    生成的消息可能会有偏差，<span class="highlight"
+                      >大家在参考时也需要仔细甄别</span
+                    >，重要决策请多方核实。本 Wiki
+                    将不定时更新。（也不排除断更的可能hhh）
+                  </p>
+                  <p>
+                    最后，感谢每一位在群里认真分享、热心解答的邻居。是你们让这个
+                    Wiki 有了灵魂。
+                  </p>
+                </div>
+                <p class="author-modal-sign">
+                  —— 赛博史官·Liwy<br />2026年8月7日
+                </p>
+                <button
+                  class="author-modal-close"
+                  @click="showAuthorModal = false"
+                >
+                  已阅
+                </button>
+              </div>
+            </div>
+          </transition>
+
+          <!-- 版本更新弹窗 -->
+          <transition name="modal">
+            <div
+              v-if="showVersionModal"
+              class="modal-mask"
+              @click="closeVersionModal"
+            >
+              <div class="modal-card version-card" @click.stop>
+                <div class="version-hero">
+                  <div class="version-hero-icon">🚀</div>
+                  <div class="version-hero-title">更新啦 · v{{ versionLog[0].version }}</div>
+                  <div class="version-hero-date">{{ versionLog[0].date }} 发布</div>
+                </div>
+                <div class="version-body">
+                  <div class="version-title">{{ versionLog[0].title }}</div>
+                  <ul class="version-changes">
+                    <li v-for="(c, i) in versionLog[0].changes" :key="i">
+                      <span class="version-check">✓</span>{{ c }}
+                    </li>
+                  </ul>
+                </div>
+                <button class="version-btn" @click="closeVersionModal">
+                  我知道了
+                </button>
+              </div>
+            </div>
+          </transition>
+
+          <!-- 打赏弹窗 -->
+          <transition name="modal">
+            <div
+              v-if="showDonateModal"
+              class="modal-mask"
+              @click="showDonateModal = false"
+            >
+              <div class="modal-card" @click.stop style="max-width: 360px">
+                <div class="modal-emoji">☕</div>
+                <h2 class="modal-title">随缘打赏</h2>
+                <p class="modal-desc">
+                  Wiki 永远免费，<strong>打赏全凭心意</strong> ☕
+                </p>
+                <div
+                  style="
+                    margin: 16px auto;
+                    width: 200px;
+                    height: 200px;
+                    border-radius: 14px;
+                    overflow: hidden;
+                    border: 1px solid var(--divider);
+                  "
+                >
+                  <img
+                    src="Thank.png"
+                    alt="收款码"
+                    style="
+                      width: 100%;
+                      height: 100%;
+                      object-fit: cover;
+                      display: block;
+                    "
+                  />
+                </div>
+                <p class="modal-sub" style="margin-bottom: 16px">
+                  扫码打赏 · 金额随心 · 功德+1
+                </p>
+                <div class="modal-btns">
+                  <button
+                    class="modal-btn primary"
+                    @click="showDonateModal = false"
+                  >
+                    已打赏，下次还来
+                  </button>
+                  <button class="modal-btn" @click="showDonateModal = false">
+                    下次一定
+                  </button>
+                </div>
+              </div>
+            </div>
+          </transition>
+
+          <!-- 数据来源弹窗 -->
+          <transition name="modal">
+            <div
+              v-if="showSourceModal"
+              class="modal-mask"
+              @click="showSourceModal = false"
+            >
+              <div
+                class="modal-card"
+                @click.stop
+                style="max-width: 420px; text-align: left"
+              >
+                <div class="modal-emoji" style="text-align: center">📊</div>
+                <h2 class="modal-title" style="text-align: center">
+                  Wiki 数据来源
+                </h2>
+                <p class="modal-desc">
+                  当前 Wiki 所有装修知识整理自以下群聊的日常讨论。
+                </p>
+                <p class="modal-desc">
+                  后续可能会考虑纳入更多群聊消息，让知识库更丰富。
+                </p>
+                <div
+                  style="
+                    background: var(--fill);
+                    border-radius: 12px;
+                    padding: 16px 18px;
+                    margin: 16px 0;
+                  "
+                >
+                  <p
+                    style="
+                      font-size: 13px;
+                      color: var(--text-3);
+                      font-weight: 600;
+                      margin-bottom: 10px;
+                    "
+                  >
+                    已纳入群聊（共 27 个）
+                  </p>
+                  <div
+                    class="source-todo-list"
+                    style="max-height: 40vh; overflow-y: auto; padding-right: 4px"
+                  >
+                    <div
+                      style="
+                        font-size: 12px;
+                        color: var(--text-3);
+                        font-weight: 600;
+                        margin: 6px 0 2px;
+                      "
+                    >
+                      📢 日常交流群
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰8月装修业主交流群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>跟着贝塔看装修</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰八九不离十·干饭联合栋</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和顶豪业主群</span>
+                    </div>
+                    <div
+                      style="
+                        font-size: 12px;
+                        color: var(--text-3);
+                        font-weight: 600;
+                        margin: 6px 0 2px;
+                      "
+                    >
+                      🛒 团购群（23 个）
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>卓高美缝邦泰璟和美缝团购群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>格力空调邦泰璟和团购群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>洋湖京东mall&amp;邦泰璟和家电团购群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>海信博世麦克维尔水机二联供团购群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>舍尔弗金属衣柜团购群🫶🏻</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>诺士顿门窗-邦泰阳台封窗团购群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>避雷邦泰美的领航者品牌家电团购群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰业主自己窗帘厂美邻工厂价</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和 _ 万家丽_约克水空调专场</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和&amp;乐盛高定团购群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和-净水器邻居团购</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和业主专属福利群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和全屋团购群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和全屋定制团购群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和半包团购群-宏师傅精工</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和大金团购群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和府智能家居团购群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和拆墙团购</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和拆墙，回收团购群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和瓷砖团购🫶🏻</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和电器比价群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和阳台封窗团购群</span>
+                    </div>
+                    <div class="source-todo done">
+                      <span class="source-todo-icon">✅</span>
+                      <span>邦泰璟和降板施工排队群</span>
+                    </div>
+                    <div class="source-todo">
+                      <span class="source-todo-icon">⬜</span>
+                      <span>待纳入更多群聊…</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="modal-btns">
+                  <button
+                    class="modal-btn primary"
+                    @click="showSourceModal = false"
+                  >
+                    知道了
+                  </button>
+                </div>
+              </div>
+            </div>
+          </transition>
+
+          <!-- 承重墙开槽警示弹窗 -->
+          <transition name="modal">
+            <div
+              v-if="showSafetyModal"
+              class="safety-modal-mask"
+              @click="showSafetyModal = false"
+            >
+              <div class="safety-modal-card" @click.stop>
+                <div class="safety-modal-emoji">⚠️</div>
+                <h2 class="safety-modal-title">承重墙开槽 · 风险警示</h2>
+                <div class="safety-alert-list">
+                  <div class="safety-alert-item">
+                    <span class="icon">🚨</span>
+                    <span
+                      >近期已两户在承重墙<strong>违规开横槽</strong>（开1米横槽切钢筋、承重柱深长横槽）</span
+                    >
+                  </div>
+                  <div class="safety-alert-item">
+                    <span class="icon">📐</span>
+                    <span
+                      >承重墙开槽必须<strong>严格按规范</strong>：横向槽≤300mm、深度≤墙厚1/3、竖槽优先</span
+                    >
+                  </div>
+                  <div class="safety-alert-item">
+                    <span class="icon">🏗️</span>
+                    <span>违规开槽会破坏结构，<strong>危及整栋楼安全</strong></span>
+                  </div>
+                </div>
+                <div class="safety-remind">
+                  📢 请<strong>务必提醒自家施工队</strong>按规范开槽，也请大家<strong>互相监督</strong>，发现违规请及时劝阻并联系物业。
+                </div>
+                <div class="modal-btns">
+                  <button
+                    class="modal-btn primary"
+                    @click="showSafetyModal = false"
+                  >
+                    我已了解，会提醒施工队
+                  </button>
+                </div>
+              </div>
+            </div>
+          </transition>
+
+          <!-- 趣味测试弹窗 -->
+          <transition name="modal">
+            <div
+              v-if="showQuizModal"
+              class="safety-modal-mask"
+              @click="closeQuiz"
+            >
+              <div class="quiz-modal-card" @click.stop>
+                <!-- 答题中 -->
+                <template v-if="quizStep < quizQuestions.length">
+                  <div class="quiz-step">
+                    第 {{ quizStep + 1 }} / {{ quizQuestions.length }} 题
+                  </div>
+                  <div class="quiz-progress">
+                    <div
+                      class="quiz-progress-fill"
+                      :style="{
+                        width: ((quizStep + 1) / quizQuestions.length) * 100 + '%',
+                      }"
+                    ></div>
+                  </div>
+                  <div class="quiz-question">
+                    {{ quizQuestions[quizStep].q }}
+                  </div>
+                  <div class="quiz-options">
+                    <button
+                      v-for="(opt, oi) in quizQuestions[quizStep].options"
+                      :key="oi"
+                      class="quiz-option"
+                      @click="answerQuiz(oi)"
+                    >
+                      <span class="opt-tag">{{ "ABCD"[oi] }}</span>
+                      <span>{{ opt.text }}</span>
+                    </button>
+                  </div>
+                  <div class="quiz-btns">
+                    <button class="quiz-btn ghost" @click="closeQuiz">退出</button>
+                  </div>
+                </template>
+
+                <!-- 结果 -->
+                <template v-else>
+                  <div class="quiz-result">
+                    <div class="quiz-result-emoji">{{ quizResult.emoji }}</div>
+                    <div class="quiz-result-title">{{ quizResult.name }}</div>
+                    <div class="quiz-result-type">{{ quizResult.type }}</div>
+                    <div class="quiz-result-member" v-if="quizResult.member">
+                      群像原型：{{ quizResult.member }}
+                    </div>
+                    <div class="quiz-result-desc">{{ quizResult.desc }}</div>
+                    <div class="quiz-tip">
+                      <span class="tip-label">💡 本命避坑小贴士</span>
+                      {{ quizResult.tip }}
+                    </div>
+                    <div class="quiz-share-box">{{ quizShareText }}</div>
+                    <div class="quiz-btns">
+                      <button
+                        class="quiz-btn primary"
+                        :class="{ copied: copied }"
+                        @click="copyQuiz"
+                      >
+                        {{ copied ? "✅ 已复制" : "📋 复制分享" }}
+                      </button>
+                      <button class="quiz-btn ghost" @click="restartQuiz">
+                        再测一次
+                      </button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </transition>
+        </div>
+      </template>
+    </div>
+
+    <script>
+      const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
+
+      createApp({
+        setup() {
+          const manifest = ref({ updated: "", daily: [], knowledge: [], groupbuy: null, groupbuyList: [] });
+          const dailyList = ref([]);
+          const knowledgeList = ref([]);
+          const groupBuyList = ref([]);
+          const groupBuyOverview = ref(null);
+          const activeGroupBuy = ref([]);
+          // 团购搜索（全文搜索）
+          const groupBuyQuery = ref("");
+          const groupBuyResults = ref([]); // 搜索结果（含命中关键词）
+          const searchLoading = ref(false);
+          const groupBuyCache = {}; // 已加载的详情页 md 缓存
+          // 搜索：加载全部详情页全文，分词匹配
+          async function runGroupBuySearch(query) {
+            const q = query.trim().toLowerCase();
+            if (!q) {
+              groupBuyResults.value = [];
+              return;
+            }
+            searchLoading.value = true;
+            try {
+              // 拆词：按空格/分隔符拆，过滤短词
+              const terms = q
+                .split(/[\s，,。、/()（）]+/)
+                .map((t) => t.trim())
+                .filter((t) => t.length >= 1);
+              const results = [];
+              for (const g of groupBuyList.value) {
+                // 取全文（带缓存）
+                let text = groupBuyCache[g.id];
+                if (text === undefined) {
+                  try {
+                    const res = await fetch("./" + encodeURI(g.path));
+                    text = res.ok ? await res.text() : "";
+                  } catch (e) {
+                    text = "";
+                  }
+                  groupBuyCache[g.id] = text;
+                }
+                const lowerText = text.toLowerCase();
+                const metaText = [
+                  g.title || "",
+                  ...(g.tags || []),
+                  ...(g.keywords || []),
+                ]
+                  .join(" ")
+                  .toLowerCase();
+                // 命中：meta 或 全文任一字段匹配到任一 term
+                const hitTerms = terms.filter(
+                  (t) => metaText.includes(t) || lowerText.includes(t)
+                );
+                if (hitTerms.length > 0) {
+                  results.push({
+                    ...g,
+                    matchTerms: hitTerms, // 命中的关键词（用于高亮）
+                    matchCount: hitTerms.length,
+                  });
+                }
+              }
+              // 按命中数降序
+              results.sort((a, b) => b.matchCount - a.matchCount);
+              groupBuyResults.value = results;
+            } finally {
+              searchLoading.value = false;
+            }
+          }
+          // 监听搜索词变化
+          watch(groupBuyQuery, (val) => {
+            runGroupBuySearch(val);
+          });
+
+          // ===== 每日整理搜索（全文检索 renovation+gossip 文件） =====
+          const dailyQuery = ref("");
+          const dailyResults = ref([]);
+          const dailyCache = {}; // 已加载的每日 md 缓存
+          const KNOWLEDGE_BASE = "内部版/装修知识库/";
+          const DAILY_BASE = "内部版/每日整理/";
+          // 拆词：按空格/分隔符拆，过滤空词
+          function splitTerms(q) {
+            return q
+              .split(/[\s，,。、/()（）]+/)
+              .map((t) => t.trim())
+              .filter((t) => t.length >= 1);
+          }
+          // 从路径加载文本（带缓存）
+          async function loadTextWithCache(path, cache) {
+            if (path in cache) return cache[path];
+            let text = "";
+            try {
+              const res = await fetch("./" + encodeURI(path));
+              text = res.ok ? await res.text() : "";
+            } catch (e) {
+              text = "";
+            }
+            cache[path] = text;
+            return text;
+          }
+          async function runDailySearch(query) {
+            const q = query.trim().toLowerCase();
+            if (!q) {
+              dailyResults.value = [];
+              return;
+            }
+            searchLoading.value = true;
+            try {
+              const terms = splitTerms(q);
+              const results = [];
+              for (const d of dailyList.value) {
+                // 元数据：日期 / 星期 / 消息数
+                const metaText = [
+                  d.date,
+                  d.weekday || "",
+                  String(d.message_count || ""),
+                ]
+                  .join(" ")
+                  .toLowerCase();
+                // 依次取 renovation 与 gossip 全文
+                const files = [
+                  { kind: "renovation", path: d.renovation, label: "装修相关" },
+                  { kind: "gossip", path: d.gossip, label: "闲聊八卦" },
+                ];
+                let text = "";
+                for (const f of files) {
+                  if (f.path) text += "\n" + (await loadTextWithCache(f.path, dailyCache));
+                }
+                const lowerText = text.toLowerCase();
+                const hitTerms = terms.filter(
+                  (t) => metaText.includes(t) || lowerText.includes(t)
+                );
+                if (hitTerms.length > 0) {
+                  results.push({
+                    ...d,
+                    matchTerms: hitTerms,
+                    matchCount: hitTerms.length,
+                  });
+                }
+              }
+              results.sort((a, b) => b.matchCount - a.matchCount);
+              dailyResults.value = results;
+            } finally {
+              searchLoading.value = false;
+            }
+          }
+          watch(dailyQuery, (val) => {
+            runDailySearch(val);
+          });
+
+          // ===== 知识库搜索（全文检索 knowledge 文件） =====
+          const knowledgeQuery = ref("");
+          const knowledgeResults = ref([]);
+          const knowledgeCache = {};
+          async function runKnowledgeSearch(query) {
+            const q = query.trim().toLowerCase();
+            if (!q) {
+              knowledgeResults.value = [];
+              return;
+            }
+            searchLoading.value = true;
+            try {
+              const terms = splitTerms(q);
+              const results = [];
+              for (const k of knowledgeList.value) {
+                const metaText = [
+                  k.title || "",
+                  ...(k.tags || []),
+                  ...(k.keywords || []),
+                ]
+                  .join(" ")
+                  .toLowerCase();
+                let text = "";
+                if (k.path) {
+                  text = await loadTextWithCache(k.path, knowledgeCache);
+                }
+                const lowerText = text.toLowerCase();
+                const hitTerms = terms.filter(
+                  (t) => metaText.includes(t) || lowerText.includes(t)
+                );
+                if (hitTerms.length > 0) {
+                  results.push({
+                    ...k,
+                    matchTerms: hitTerms,
+                    matchCount: hitTerms.length,
+                  });
+                }
+              }
+              results.sort((a, b) => b.matchCount - a.matchCount);
+              knowledgeResults.value = results;
+            } finally {
+              searchLoading.value = false;
+            }
+          }
+          watch(knowledgeQuery, (val) => {
+            runKnowledgeSearch(val);
+          });
+
+          const dailyShowAll = ref(false);
+          // 每日整理展示列表：默认只显示最新 3 天，展开后显示全部
+          const displayDailyList = computed(() => {
+            const list = dailyList.value;
+            return dailyShowAll.value ? list : list.slice(0, 3);
+          });
+          // 每日整理是否有更多（超过 3 天）
+          const dailyHasMore = computed(() => dailyList.value.length > 3);
+          const tab = ref("daily");
+          const currentContent = ref(null);
+          const currentTitle = ref("");
+          const loading = ref(false);
+          const showGossipModal = ref(false);
+          const showAuthorModal = ref(false);
+          const showDonateModal = ref(false);
+          const showSourceModal = ref(false);
+          const showSafetyModal = ref(false);
+          const showVersionModal = ref(false);
+          // 图片查看弹窗
+          const showImgModal = ref(false);
+          const imgModalSrc = ref("");
+          // 版本号与版本记录（来自 version-data.js，由维护者本地维护）
+          const VERSION = window.VERSION_DATA.VERSION;
+          const versionLog = window.VERSION_DATA.versionLog;
+          const showQuizModal = ref(false);
+          const quizStep = ref(0);
+          const quizAnswers = ref([]);
+          const quizResult = ref({});
+          const copied = ref(false);
+          const authenticated = ref(localStorage.getItem("wiki_auth") === "1");
+          const passwordInput = ref("");
+          const passwordError = ref("");
+
+          const PASSWORD = "bangtai";
+
+                    // ===== 趣味测试题库（来自 quiz-data.js）=====
+          const quizQuestions = window.QUIZ_DATA.questions;
+          const quizResults = window.QUIZ_DATA.results;
+
+          const quizShareText = ref("");
+
+          function startQuiz() {
+            quizStep.value = 0;
+            quizAnswers.value = [];
+            copied.value = false;
+            quizResult.value = {};
+            quizShareText.value = "";
+            showQuizModal.value = true;
+          }
+
+          function answerQuiz(oi) {
+            quizAnswers.value.push(quizQuestions[quizStep.value].options[oi].dim);
+            quizStep.value++;
+            if (quizStep.value >= quizQuestions.length) {
+              computeResult();
+            }
+          }
+
+          function computeResult() {
+            const [r1, r2, m1, m2, c1, c2] = quizAnswers.value;
+            // 宽松判定：该维度任选其一倾向即归为该侧，保证结果分布更均衡
+            const rigor = r1 === "rigor" || r2 === "rigor" ? "rigor" : "easy";
+            const money = m1 === "money" || m2 === "money" ? "money" : "spend";
+            const care = c1 === "care" || c2 === "care" ? "care" : "solo";
+            // 特殊人格：VV（热心 + 爱分享总结）—— 经验分享与答疑都热心时触发
+            let result;
+            if (c1 === "care" && c2 === "care") {
+              result = quizResults["vv"];
+            } else {
+              const key = rigor + "-" + money + "-" + care;
+              result = quizResults[key] || quizResults["easy-money-care"];
+            }
+            quizResult.value = result;
+            quizShareText.value =
+              "🔮 我刚测出我的装修人格是【" +
+              result.name +
+              "】" +
+              result.emoji +
+              "，群像原型是" +
+              (result.member || "神秘人物") +
+              "！在【美邻装修笔记】6 道题测测你是哪种装修达人，看看你像群里哪位邻居～ @某邻居 你也来试试！";
+          }
+
+          function restartQuiz() {
+            startQuiz();
+          }
+
+          function closeQuiz() {
+            showQuizModal.value = false;
+          }
+
+          async function copyQuiz() {
+            try {
+              await navigator.clipboard.writeText(quizShareText.value);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = quizShareText.value;
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand("copy");
+              document.body.removeChild(ta);
+            }
+            copied.value = true;
+            setTimeout(() => (copied.value = false), 2000);
+          }
+
+          function handleLogin() {
+            if (passwordInput.value === PASSWORD) {
+              localStorage.setItem("wiki_auth", "1");
+              authenticated.value = true;
+              passwordError.value = "";
+              // 若用户尚未见过当前版本，优先打开版本弹窗；否则打开作者碎碎念
+              if (localStorage.getItem("wiki_seen_version") !== VERSION) {
+                showVersionModal.value = true;
+              } else {
+                showAuthorModal.value = true;
+              }
+            } else {
+              passwordError.value = "密码错误，请重试";
+              passwordInput.value = "";
+            }
+          }
+
+          // 关闭版本弹窗：记录已见版本
+          function closeVersionModal() {
+            showVersionModal.value = false;
+            localStorage.setItem("wiki_seen_version", VERSION);
+          }
+
+          // 检查版本：已登录用户首次进入新版本时自动打开版本弹窗
+          function checkVersion() {
+            if (localStorage.getItem("wiki_seen_version") !== VERSION) {
+              showVersionModal.value = true;
+            }
+          }
+
+          marked.setOptions({ breaks: true, gfm: true });
+
+          function cleanWikiLinks(md) {
+            return md.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (m, p1, p2) => {
+              const full = p1.split("/").pop().replace(/\.md$/, "").trim();
+              // 提取文件名开头的主题 id（如 "09-厨卫" → "09"）
+              const idMatch = full.match(/^(\d{2})/);
+              if (idMatch) {
+                const id = idMatch[1];
+                // 通过 manifest 确认该 id 存在，才生成可跳转链接
+                const exists = (manifest.value.knowledge || []).some(
+                  (k) => k.id === id
+                );
+                if (exists) {
+                  const name = p2 ? p2.trim() : full.replace(/^\d{2}-/, "");
+                  return `<a class="wiki-link" href="#/knowledge/${id}">${name}</a>`;
+                }
+              }
+              return "`" + full + "`";
+            });
+          }
+
+          function stripFrontmatter(md) {
+            return md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+          }
+
+          // 修正 markdown 图片的相对路径：md 文件里的图片引用是相对"md 所在目录"，
+          // 但浏览器渲染 <img>/<a> 时按"当前页面 URL"解析，基准不一致会导致图片 404。
+          // 这里根据 md 文件路径推导出正确的基准目录，重写 <img src> 和指向图片的 <a href>。
+          function fixImgSrc(html, mdPath) {
+            // mdPath 形如 "内部版/团购/团购-04-中央空调.md" 或 "../dist/内部版/团购/..."
+            // 推导 md 所在目录（去掉文件名部分）
+            let dir = mdPath.replace(/[^/]+$/, "");
+            if (dir.endsWith("/")) dir = dir.slice(0, -1);
+            // 处理 <img>
+            html = html.replace(
+              /<img([^>]*?)\ssrc="([^"#][^"]*)"([^>]*?)>/gi,
+              (m, pre, src, post) => {
+                if (
+                  /^(https?:)?\/\//i.test(src) ||
+                  src.startsWith("/") ||
+                  src.startsWith("data:") ||
+                  src.startsWith("#") ||
+                  src.startsWith("blob:")
+                ) {
+                  return m;
+                }
+                const fixed = dir ? dir + "/" + src : src;
+                return `<img${pre} src="${fixed}"${post}>`;
+              }
+            );
+            // 处理指向图片文件的 <a href>（用于 🖼️ 弹窗链接）
+            html = html.replace(
+              /<a([^>]*?)\shref="([^"#][^"]*\.(?:jpe?g|png|gif|webp|svg|avif)(?:[?#][^"]*)?)"([^>]*?)>/gi,
+              (m, pre, src, post) => {
+                if (
+                  /^(https?:)?\/\//i.test(src) ||
+                  src.startsWith("/") ||
+                  src.startsWith("data:") ||
+                  src.startsWith("#")
+                ) {
+                  return m;
+                }
+                const fixed = dir ? dir + "/" + src : src;
+                return `<a${pre} href="${fixed}"${post}>`;
+              }
+            );
+            return html;
+          }
+
+          // 把 markdown 表格包进可横向滚动的容器（移动端表格过宽时横向滚动查看）
+          function wrapTables(html) {
+            // 匹配 <table>...</table>（含任意内部内容，非贪婪）
+            return html.replace(
+              /<table[\s\S]*?<\/table>/gi,
+              (m) => `<div class="table-wrap">${m}</div>`
+            );
+          }
+
+          // 搜索跳转高亮
+          let pendingHighlight = null; // 待高亮的关键词数组
+          function loadGroupBuyWithHighlight(g) {
+            pendingHighlight = (g.matchTerms || []).filter(
+              (t) => t && t.length >= 1
+            );
+            loadContent(g.path, g.title, "#/groupbuy/" + g.id);
+          }
+          // 每日整理搜索跳转：装修相关 / 闲聊八卦（含关键词高亮）
+          function loadDailyWithHighlight(d, kind) {
+            pendingHighlight = (d.matchTerms || []).filter(
+              (t) => t && t.length >= 1
+            );
+            if (kind === "gossip") {
+              if (d.gossip) {
+                loadContent(
+                  d.gossip,
+                  "闲聊八卦 · " + d.date,
+                  "#/daily/" + d.date + "?t=gossip"
+                );
+              } else {
+                pendingHighlight = null;
+                showGossipNotice();
+              }
+            } else {
+              loadContent(
+                d.renovation,
+                "装修相关 · " + d.date,
+                "#/daily/" + d.date
+              );
+            }
+          }
+          // 知识库搜索跳转（含关键词高亮）
+          function loadKnowledgeWithHighlight(k) {
+            pendingHighlight = (k.matchTerms || []).filter(
+              (t) => t && t.length >= 1
+            );
+            loadContent(k.path, k.title, "#/knowledge/" + k.id);
+          }
+          // 在已渲染的 HTML 中高亮并滚动到第一个命中关键词
+          function applyHighlight() {
+            if (!pendingHighlight || pendingHighlight.length === 0) return;
+            const terms = pendingHighlight;
+            pendingHighlight = null;
+            const body = document.querySelector(".article-body");
+            if (!body) return;
+            // 遍历段落/列表/表格单元格，找到第一个包含任一关键词的元素
+            const nodes = body.querySelectorAll("p, li, td, th, h1, h2, h3, h4, blockquote");
+            for (const node of nodes) {
+              const text = (node.textContent || "").toLowerCase();
+              const hit = terms.find((t) => text.includes(t.toLowerCase()));
+              if (hit) {
+                // 高亮命中词
+                const hl = hit.toLowerCase();
+                const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+                const textNodes = [];
+                let n;
+                while ((n = walker.nextNode())) textNodes.push(n);
+                textNodes.forEach((tn) => {
+                  const idx = tn.textContent.toLowerCase().indexOf(hl);
+                  if (idx !== -1) {
+                    const span = document.createElement("mark");
+                    span.className = "gb-highlight";
+                    const after = tn.splitText(idx);
+                    after.splitText(hl.length);
+                    tn.parentNode.replaceChild(span, after);
+                    span.textContent = after.textContent;
+                    after.remove();
+                  }
+                });
+                // 滚动到该元素
+                node.scrollIntoView({ behavior: "smooth", block: "center" });
+                node.classList.add("gb-highlight-block");
+                break;
+              }
+            }
+          }
+
+          // 图片查看弹窗
+          function openImgModal(src) {
+            imgModalSrc.value = src;
+            showImgModal.value = true;
+          }
+          function closeImgModal() {
+            showImgModal.value = false;
+            imgModalSrc.value = "";
+          }
+          // 点击文章内图片或"🖼️ 查看图片"图标 → 弹窗查看大图
+          function handleArticleClick(e) {
+            const t = e.target;
+            if (!t || !t.closest(".article-body")) return;
+            // 点击 <img>：直接弹窗
+            if (t.tagName === "IMG") {
+              openImgModal(t.getAttribute("src") || t.src);
+              return;
+            }
+            // 点击指向图片的链接（如 markdown 表格"🖼️"图标）：弹窗显示，阻止跳转
+            if (t.tagName === "A") {
+              const href = t.getAttribute("href") || "";
+              if (/\.(jpe?g|png|gif|webp|svg|avif)([?#].*)?$/i.test(href)) {
+                e.preventDefault();
+                openImgModal(href);
+              }
+            }
+          }
+
+          // 当前已加载文档对应的 routeKey（用于避免 hashchange 触发的重复加载）
+          let currentRouteKey = "";
+
+          async function loadContent(path, title, routeKey) {
+            loading.value = true;
+            currentTitle.value = title;
+            currentContent.value =
+              '<div class="loading"><div class="spinner"></div>正在加载…</div>';
+            try {
+              const res = await fetch("./" + encodeURI(path));
+              if (!res.ok) throw new Error("文件加载失败：" + res.status);
+              let md = await res.text();
+              md = stripFrontmatter(md);
+              md = cleanWikiLinks(md);
+              let html = marked.parse(md);
+              html = fixImgSrc(html, path);
+              html = wrapTables(html);
+              currentContent.value = html;
+              // 记录当前已加载的路由，供 hashchange 防重复加载
+              currentRouteKey = routeKey || "";
+              // 同步 URL hash，使浏览器前进/后退可回溯（触发 hashchange，由 handleRoute 过滤）
+              if (routeKey && location.hash !== routeKey) {
+                location.hash = routeKey;
+              }
+            } catch (e) {
+              currentContent.value =
+                '<div class="empty"><div class="big-icon">⚠️</div><div class="hint-text">加载失败：' +
+                e.message +
+                "<br><small>需通过 HTTP 服务访问（如 python -m http.server），不能直接双击打开。</small></div></div>";
+            }
+            loading.value = false;
+            // 切换到文章态，回到顶部
+            await nextTick();
+            if (pendingHighlight && pendingHighlight.length > 0) {
+              // 搜索跳转：高亮 + 滚动定位到命中位置
+              applyHighlight();
+            } else {
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }
+          }
+
+          // 回到列表态：清空 hash，交给 handleRoute 统一处理
+          function backToList() {
+            if (location.hash) {
+              location.hash = "";
+            } else {
+              currentContent.value = null;
+              currentTitle.value = "";
+              currentRouteKey = "";
+              nextTick(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+            }
+          }
+
+          // ===== Hash 路由 =====
+          // 从 hash 反查文档路径：优先查 manifest，否则走 TOP10 快捷路径
+          function resolveRoute(hash) {
+            const h = hash || "";
+            // #/top10 → 装修全程地图（原热点问题TOP10已并入00地图）
+            if (h === "#/top10") {
+              return {
+                path: "内部版/装修知识库/00-装修全程地图.md",
+                title: "🗺️ 装修全程地图",
+                routeKey: "#/top10",
+              };
+            }
+            // #/groupbuy → 团购总览页
+            if (h === "#/groupbuy") {
+              return {
+                path: "内部版/团购/00-团购总览.md",
+                title: "🛒 装修团购总览",
+                routeKey: "#/groupbuy",
+              };
+            }
+            // #/groupbuy/{id} → 团购品类详情页
+            let gm = h.match(/^#\/groupbuy\/([\w-]+)$/);
+            if (gm) {
+              const g = (groupBuyList.value || []).find(
+                (x) => x.id === gm[1]
+              );
+              if (g) {
+                return {
+                  path: g.path,
+                  title: g.title,
+                  routeKey: "#/groupbuy/" + g.id,
+                };
+              }
+            }
+            // #/daily/{date}?t=reno|gossip
+            let m = h.match(/^#\/daily\/([\d-]+)(?:\?t=([a-z]+))?$/);
+            if (m) {
+              const date = m[1];
+              const type = m[2] || "reno";
+              const d = (manifest.value.daily || []).find(
+                (x) => x.date === date
+              );
+              if (d) {
+                if (type === "gossip") {
+                  // 闲聊八卦：任意日期均可加载内容（无八卦文件时兜底弹窗）
+                  if (d.gossip) {
+                    return {
+                      path: d.gossip,
+                      title: "闲聊八卦 · " + date,
+                      routeKey: "#/daily/" + date + "?t=gossip",
+                    };
+                  }
+                  showGossipNotice();
+                  return null;
+                }
+                return {
+                  path: d.renovation,
+                  title: "装修相关 · " + date,
+                  routeKey: "#/daily/" + date,
+                };
+              }
+            }
+            // #/knowledge/{id}
+            m = h.match(/^#\/knowledge\/([\w-]+)$/);
+            if (m) {
+              const k = (manifest.value.knowledge || []).find(
+                (x) => x.id === m[1]
+              );
+              if (k) {
+                return {
+                  path: k.path,
+                  title: k.title,
+                  routeKey: "#/knowledge/" + k.id,
+                };
+              }
+            }
+            return null;
+          }
+
+          // 统一处理 hash 变化：解析路由并加载对应文档；无法解析则回列表态
+          function handleRoute() {
+            const r = resolveRoute(location.hash);
+            // 已加载同一文档时跳过，避免 loadContent 设置 hash 后触发重复加载
+            if (r && r.routeKey === currentRouteKey) return;
+            if (r) {
+              loadContent(r.path, r.title, r.routeKey);
+            } else {
+              currentContent.value = null;
+              currentTitle.value = "";
+              currentRouteKey = "";
+              nextTick(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+            }
+          }
+
+          // 装修全程地图：直接加载对应的知识库文档
+          const TOP10_PATH = "内部版/装修知识库/00-装修全程地图.md";
+          function loadTop10() {
+            loadContent(TOP10_PATH, "🗺️ 装修全程地图", "#/top10");
+          }
+
+          // 团购总览：直接加载总览页
+          const GROUPBUY_OVERVIEW_PATH = "内部版/团购/00-团购总览.md";
+          function loadGroupBuyOverview() {
+            loadContent(GROUPBUY_OVERVIEW_PATH, "🛒 装修团购总览", "#/groupbuy");
+          }
+
+          function showGossipNotice() {
+            showGossipModal.value = true;
+          }
+
+          function handleGossip(d) {
+            // 任意日期均可点击查看八卦内容（无八卦文件时兜底弹窗）
+            if (d.gossip) {
+              loadContent(d.gossip, "闲聊八卦 · " + d.date, "#/daily/" + d.date + "?t=gossip");
+            } else {
+              showGossipNotice();
+            }
+          }
+
+          onMounted(async () => {
+            try {
+              const res = await fetch("./manifest.json");
+              manifest.value = await res.json();
+              dailyList.value = (manifest.value.daily || [])
+                .slice()
+                .sort((a, b) => b.date.localeCompare(a.date));
+              knowledgeList.value = manifest.value.knowledge || [];
+              groupBuyList.value = manifest.value.groupbuyList || [];
+              activeGroupBuy.value = manifest.value.activeGroupBuy || [];
+            } catch (e) {
+              console.error("加载 manifest 失败:", e);
+            }
+            // 监听浏览器前进/后退，统一走路由分发
+            window.addEventListener("hashchange", handleRoute);
+            // 首次进入：若 URL 带 hash（刷新/直达链接），解析并加载对应文档
+            if (location.hash) {
+              handleRoute();
+            }
+            // 已登录用户首次进入时，检查是否有新版本（自动打开版本弹窗）
+            if (authenticated.value) {
+              checkVersion();
+            }
+          });
+
+
+
+          return {
+            manifest,
+            dailyList,
+            displayDailyList,
+            dailyShowAll,
+            dailyHasMore,
+            knowledgeList,
+            groupBuyList,
+            activeGroupBuy,
+            groupBuyQuery,
+            groupBuyResults,
+            searchLoading,
+            loadGroupBuyWithHighlight,
+            dailyQuery,
+            dailyResults,
+            knowledgeQuery,
+            knowledgeResults,
+            loadDailyWithHighlight,
+            loadKnowledgeWithHighlight,
+            tab,
+            currentContent,
+            currentTitle,
+            loading,
+            loadContent,
+            loadTop10,
+            loadGroupBuyOverview,
+            backToList,
+            showGossipModal,
+            showGossipNotice,
+            handleGossip,
+            showAuthorModal,
+            showDonateModal,
+            showSourceModal,
+            showSafetyModal,
+            showVersionModal,
+            showImgModal,
+            imgModalSrc,
+            openImgModal,
+            closeImgModal,
+            handleArticleClick,
+            VERSION,
+            versionLog,
+            closeVersionModal,
+            authenticated,
+            passwordInput,
+            passwordError,
+            handleLogin,
+            showQuizModal,
+            quizStep,
+            quizQuestions,
+            quizResult,
+            quizShareText,
+            copied,
+            startQuiz,
+            answerQuiz,
+            restartQuiz,
+            closeQuiz,
+            copyQuiz,
+          };
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>
