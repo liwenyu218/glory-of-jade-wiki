@@ -7,12 +7,14 @@ echo  ============================================
 echo   LLW WIKI 本地预览服务已启动
 echo  ============================================
 echo.
-echo   浏览器即将打开 http://localhost:8000/public/
+echo   浏览器即将打开 http://localhost:8000/dist/
 echo.
 echo   首次加载可能需要几秒钟，请稍候。
 echo.
+echo   已禁用浏览器缓存，改完文件刷新即生效。
+echo.
 echo   关闭此窗口即可停止服务。
 echo.
-start "" http://localhost:8000/public/
-python -m http.server 8000
+start "" http://localhost:8000/dist/
+node "%~dp0..\scripts\serve-local.js" 8000
 pause
