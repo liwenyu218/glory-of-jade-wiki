@@ -1353,6 +1353,138 @@
         color: #fff;
       }
 
+      /* ===== 装修避坑大挑战 ===== */
+      .challenge-card {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border-radius: 16px;
+        padding: 18px 20px;
+        margin: 12px 0 18px;
+        color: #fff;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25);
+        transition: all 0.2s ease;
+        border: none;
+        width: 100%;
+        text-align: left;
+        font-family: inherit;
+      }
+      .challenge-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 30px rgba(16, 185, 129, 0.35);
+      }
+      .challenge-card .quiz-text {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .challenge-card .quiz-emoji {
+        font-size: 30px;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .challenge-card .quiz-title {
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .challenge-card .quiz-sub {
+        font-size: 12.5px;
+        opacity: 0.9;
+        margin-top: 3px;
+        font-weight: 500;
+      }
+      .challenge-card .quiz-arrow {
+        font-size: 20px;
+        opacity: 0.9;
+        flex-shrink: 0;
+      }
+      .challenge-progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #10b981, #059669);
+        border-radius: 999px;
+        transition: width 0.35s ease;
+      }
+      .quiz-option.opt-right {
+        border-color: #10b981;
+        background: rgba(16, 185, 129, 0.1);
+      }
+      .quiz-option.opt-right .opt-tag {
+        border-color: #10b981;
+        color: #059669;
+      }
+      .quiz-option.opt-wrong {
+        border-color: #ef4444;
+        background: rgba(239, 68, 68, 0.08);
+      }
+      .quiz-option.opt-wrong .opt-tag {
+        border-color: #ef4444;
+        color: #dc2626;
+      }
+      .quiz-option.opt-dim {
+        opacity: 0.45;
+      }
+      .quiz-option:disabled {
+        cursor: default;
+      }
+      .challenge-explain {
+        background: var(--fill);
+        border-radius: 12px;
+        padding: 14px 16px;
+        margin-bottom: 16px;
+        text-align: left;
+        animation: modalIn 0.25s ease;
+      }
+      .challenge-explain-verdict {
+        font-size: 13.5px;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .challenge-explain-verdict.ok {
+        color: #059669;
+      }
+      .challenge-explain-verdict.no {
+        color: #dc2626;
+      }
+      .challenge-explain-text {
+        font-size: 13.5px;
+        color: var(--text-2);
+        line-height: 1.7;
+        margin-bottom: 10px;
+      }
+      .challenge-source-link {
+        background: none;
+        border: none;
+        padding: 0;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        color: #059669;
+        cursor: pointer;
+      }
+      .challenge-source-link:hover {
+        text-decoration: underline;
+      }
+      .challenge-score-line {
+        font-size: 14px;
+        color: var(--text-2);
+        margin-bottom: 14px;
+      }
+      .challenge-score-line strong {
+        font-size: 20px;
+        color: #059669;
+        font-weight: 800;
+      }
+      .quiz-btn.challenge-primary {
+        background: linear-gradient(135deg, #10b981, #059669);
+      }
+      .quiz-btn.challenge-primary:hover {
+        filter: brightness(1.08);
+      }
+
       /* 数据来源弹窗 */
       .source-todo-list {
         display: flex;

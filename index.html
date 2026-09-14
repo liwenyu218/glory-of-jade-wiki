@@ -14,6 +14,7 @@
   </head>
   <body>
     <script src="./quiz-data.js"></script>
+    <script src="./challenge-data.js"></script>
     <script src="./version-data.js"></script>
     <div id="app">
       <!-- 密码门禁 -->
@@ -127,6 +128,21 @@
                   <div class="quiz-title">测测你的装修人格</div>
                   <div class="quiz-sub">
                     6 道题 · 看看你更像群里的哪种装修达人
+                  </div>
+                </div>
+              </div>
+              <span class="quiz-arrow">›</span>
+            </button>
+
+            <!-- 装修避坑大挑战入口 -->
+            <button v-if="tab==='daily'" class="challenge-card" @click="startChallenge">
+              <div class="quiz-text">
+                <span class="quiz-emoji">🛡️</span>
+                <div>
+                  <div class="quiz-title">装修避坑大挑战</div>
+                  <div class="quiz-sub">
+                    题库 {{ challengePoolSize }} 道，每局随机抽 {{ challengeRoundSize }} 道 ·
+                    全是群里邻居真实踩过的坑
                   </div>
                 </div>
               </div>
@@ -919,6 +935,103 @@
               </div>
             </div>
           </transition>
+
+          <!-- 装修避坑大挑战弹窗 -->
+          <transition name="modal">
+            <div
+              v-if="showChallengeModal"
+              class="safety-modal-mask"
+              @click="closeChallenge"
+            >
+              <div class="quiz-modal-card" @click.stop>
+                <!-- 答题中 -->
+                <template v-if="currentChallenge">
+                  <div class="quiz-step">
+                    {{ currentChallenge.scene }} · 第 {{ challengeStep + 1 }} /
+                    {{ challengeRound.length }} 题
+                  </div>
+                  <div class="quiz-progress">
+                    <div class="challenge-progress-fill" :style="challengeProgressStyle"></div>
+                  </div>
+                  <div class="quiz-question">{{ currentChallenge.q }}</div>
+                  <div class="quiz-options">
+                    <button
+                      v-for="(opt, oi) in currentChallenge.options"
+                      :key="oi"
+                      class="quiz-option"
+                      :class="challengeOptionClass(oi)"
+                      :disabled="challengeSelected !== -1"
+                      @click="answerChallenge(oi)"
+                    >
+                      <span class="opt-tag">{{ challengeOptionTag(oi) }}</span>
+                      <span>{{ opt }}</span>
+                    </button>
+                  </div>
+                  <div v-if="challengeSelected !== -1" class="challenge-explain">
+                    <div
+                      class="challenge-explain-verdict"
+                      :class="selectedIsRight ? 'ok' : 'no'"
+                    >
+                      {{ selectedIsRight ? "🎉 答对了，这坑拦不住你" : "💥 踩坑了，这正是最容易中招的地方" }}
+                    </div>
+                    <div class="challenge-explain-text">{{ currentChallenge.explain }}</div>
+                    <button
+                      class="challenge-source-link"
+                      @click="challengeGoSource(currentChallenge.sourceId)"
+                    >
+                      📖 完整知识：《{{ currentChallenge.sourceName }}》›
+                    </button>
+                  </div>
+                  <div class="quiz-btns">
+                    <button
+                      v-if="challengeSelected === -1"
+                      class="quiz-btn ghost"
+                      @click="closeChallenge"
+                    >
+                      退出
+                    </button>
+                    <button
+                      v-else
+                      class="quiz-btn primary challenge-primary"
+                      @click="nextChallenge"
+                    >
+                      {{ challengeStep === challengeRound.length - 1 ? "查看段位" : "下一题" }}
+                    </button>
+                  </div>
+                </template>
+
+                <!-- 结果 -->
+                <template v-else>
+                  <div class="quiz-result">
+                    <div class="quiz-result-emoji">{{ challengeTier.emoji }}</div>
+                    <div class="quiz-result-title">{{ challengeTier.name }}</div>
+                    <div class="challenge-score-line">
+                      答对 <strong>{{ challengeScore }}</strong> /
+                      {{ challengeRound.length }} 题
+                    </div>
+                    <div class="quiz-result-desc">{{ challengeTier.desc }}</div>
+                    <div class="quiz-tip">
+                      <span class="tip-label">💡 补课建议</span>
+                      {{ challengeTier.tip }}
+                    </div>
+                    <div class="quiz-share-box">{{ challengeShareText }}</div>
+                    <div class="quiz-btns">
+                      <button
+                        class="quiz-btn primary"
+                        :class="{ copied: challengeCopied }"
+                        @click="copyChallenge"
+                      >
+                        {{ challengeCopied ? "✅ 已复制" : "📋 复制晒分" }}
+                      </button>
+                      <button class="quiz-btn ghost" @click="restartChallenge">
+                        再战一次
+                      </button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </transition>
         </div>
       </template>
     </div>
@@ -1226,6 +1339,173 @@
             }
             copied.value = true;
             setTimeout(() => (copied.value = false), 2000);
+          }
+
+          // ===== 装修避坑大挑战（来自 challenge-data.js）=====
+          const challengePool = window.CHALLENGE_DATA.questions;
+          const challengeTiers = window.CHALLENGE_DATA.tiers;
+          const CHALLENGE_ROUND_SIZE = 12; // 每局抽取题数（tiers 分数区间按 12 题划分）
+          const showChallengeModal = ref(false);
+          const challengeRound = ref([]); // 本局 12 道题（随机抽 + 选项打乱）
+          const challengeStep = ref(0);
+          const challengeSelected = ref(-1); // 当前题已选选项（-1 = 未作答）
+          const challengeScore = ref(0);
+          const challengeTier = ref({});
+          const challengeShareText = ref("");
+          const challengeCopied = ref(false);
+
+          const challengePoolSize = challengePool.length;
+          const challengeRoundSize = Math.min(CHALLENGE_ROUND_SIZE, challengePool.length);
+
+          const currentChallenge = computed(() => {
+            return challengeRound.value[challengeStep.value] || null;
+          });
+
+          const selectedIsRight = computed(() => {
+            if (challengeSelected.value === -1 || !currentChallenge.value)
+              return false;
+            return challengeSelected.value === currentChallenge.value.answer;
+          });
+
+          function shuffleList(arr) {
+            const a = arr.slice();
+            for (let i = a.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              const t = a[i];
+              a[i] = a[j];
+              a[j] = t;
+            }
+            return a;
+          }
+
+          // 每局从题库随机抽题，并把选项顺序打乱（answer 索引同步重算）
+          function buildChallengeRound() {
+            const picked = shuffleList(challengePool).slice(0, challengeRoundSize);
+            return picked.map((q) => {
+              const pairs = q.options.map((text, i) => ({
+                text: text,
+                right: i === q.answer,
+              }));
+              const mixed = shuffleList(pairs);
+              return {
+                scene: q.scene,
+                q: q.q,
+                options: mixed.map((p) => p.text),
+                answer: mixed.findIndex((p) => p.right),
+                explain: q.explain,
+                sourceId: q.sourceId,
+                sourceName: q.sourceName,
+              };
+            });
+          }
+
+          function startChallenge() {
+            challengeRound.value = buildChallengeRound();
+            challengeStep.value = 0;
+            challengeSelected.value = -1;
+            challengeScore.value = 0;
+            challengeTier.value = {};
+            challengeShareText.value = "";
+            challengeCopied.value = false;
+            showChallengeModal.value = true;
+          }
+
+          // 进度条宽度
+          const challengeProgressStyle = computed(() => {
+            const total = challengeRound.value.length || 1;
+            return {
+              width: ((challengeStep.value + 1) / total) * 100 + "%",
+            };
+          });
+
+          // 选项状态类：opt-right 正确 / opt-wrong 选错 / opt-dim 未选中的其他项
+          function challengeOptionClass(oi) {
+            const cur = currentChallenge.value;
+            if (!cur || challengeSelected.value === -1) return {};
+            return {
+              "opt-right": oi === cur.answer,
+              "opt-wrong":
+                challengeSelected.value === oi && oi !== cur.answer,
+              "opt-dim":
+                oi !== challengeSelected.value && oi !== cur.answer,
+            };
+          }
+
+          // 选项标签：作答前 A/B/C/D，作答后正确项 ✓、错选项 ✕
+          function challengeOptionTag(oi) {
+            const cur = currentChallenge.value;
+            if (!cur || challengeSelected.value === -1) return "ABCD"[oi];
+            if (oi === cur.answer) return "✓";
+            if (oi === challengeSelected.value) return "✕";
+            return "ABCD"[oi];
+          }
+
+          function answerChallenge(oi) {
+            if (challengeSelected.value !== -1) return; // 已作答，防止重复点击
+            challengeSelected.value = oi;
+            if (currentChallenge.value && oi === currentChallenge.value.answer) {
+              challengeScore.value++;
+            }
+          }
+
+          function nextChallenge() {
+            challengeSelected.value = -1;
+            challengeStep.value++;
+            if (challengeStep.value >= challengeRound.value.length) {
+              computeChallengeTier();
+            }
+          }
+
+          function computeChallengeTier() {
+            const score = challengeScore.value;
+            const tier =
+              challengeTiers.find(
+                (t) => score >= t.min && score <= t.max
+              ) || challengeTiers[0];
+            challengeTier.value = tier;
+            challengeShareText.value =
+              tier.emoji +
+              " 我在【美邻装修笔记】的「装修避坑大挑战」里答对 " +
+              score +
+              "/" +
+              challengeRound.value.length +
+              " 题，段位是【" +
+              tier.name +
+              "】！题目全是业主群真实踩过的坑，@某邻居 你来能对几题？";
+          }
+
+          function restartChallenge() {
+            startChallenge();
+          }
+
+          function closeChallenge() {
+            showChallengeModal.value = false;
+          }
+
+          // 从解析跳转到对应知识库主题页
+          function challengeGoSource(id) {
+            const k = (manifest.value.knowledge || []).find(
+              (x) => x.id === id
+            );
+            if (k) {
+              showChallengeModal.value = false;
+              loadContent(k.path, k.title, "#/knowledge/" + id);
+            }
+          }
+
+          async function copyChallenge() {
+            try {
+              await navigator.clipboard.writeText(challengeShareText.value);
+            } catch (e) {
+              const ta = document.createElement("textarea");
+              ta.value = challengeShareText.value;
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand("copy");
+              document.body.removeChild(ta);
+            }
+            challengeCopied.value = true;
+            setTimeout(() => (challengeCopied.value = false), 2000);
           }
 
           function handleLogin() {
@@ -1700,6 +1980,28 @@
             restartQuiz,
             closeQuiz,
             copyQuiz,
+            showChallengeModal,
+            challengeStep,
+            challengeSelected,
+            challengeScore,
+            challengeTier,
+            challengeShareText,
+            challengeCopied,
+            challengeRound,
+            challengePoolSize,
+            challengeRoundSize,
+            currentChallenge,
+            selectedIsRight,
+            challengeProgressStyle,
+            challengeOptionClass,
+            challengeOptionTag,
+            startChallenge,
+            answerChallenge,
+            nextChallenge,
+            restartChallenge,
+            closeChallenge,
+            challengeGoSource,
+            copyChallenge,
           };
         },
       }).mount("#app");
