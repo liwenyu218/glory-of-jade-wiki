@@ -17,25 +17,6 @@
     <script src="./challenge-data.js"></script>
     <script src="./version-data.js"></script>
     <div id="app">
-      <!-- 密码门禁 -->
-      <div v-if="!authenticated" class="gate-overlay">
-        <div class="gate-card">
-          <div class="gate-emoji">🏠</div>
-          <h1 class="gate-title">美邻装修笔记</h1>
-          <p class="gate-sub">邦泰 · 璟和业主交流群</p>
-          <input
-            class="gate-input"
-            type="password"
-            v-model="passwordInput"
-            placeholder="请输入访问密码"
-            @keyup.enter="handleLogin"
-            autofocus
-          />
-          <div class="gate-error">{{ passwordError }}</div>
-          <button class="gate-btn" @click="handleLogin">进入 Wiki</button>
-        </div>
-      </div>
-
       <template v-if="authenticated">
         <template v-if="currentContent === null">
           <div class="top-btns">
@@ -1264,11 +1245,9 @@
           const quizAnswers = ref([]);
           const quizResult = ref({});
           const copied = ref(false);
-          const authenticated = ref(localStorage.getItem("wiki_auth") === "1");
-          const passwordInput = ref("");
-          const passwordError = ref("");
-
-          const PASSWORD = "bangtai";
+          // 免密直登：不再校验密码，进入站点即视为已登录
+          const authenticated = ref(true);
+          const AUTH_KEY = "wiki_auth";
 
                     // ===== 趣味测试题库（来自 quiz-data.js）=====
           const quizQuestions = window.QUIZ_DATA.questions;
@@ -1508,20 +1487,15 @@
             setTimeout(() => (challengeCopied.value = false), 2000);
           }
 
-          function handleLogin() {
-            if (passwordInput.value === PASSWORD) {
-              localStorage.setItem("wiki_auth", "1");
-              authenticated.value = true;
-              passwordError.value = "";
-              // 若用户尚未见过当前版本，优先打开版本弹窗；否则打开作者碎碎念
-              if (localStorage.getItem("wiki_seen_version") !== VERSION) {
-                showVersionModal.value = true;
-              } else {
-                showAuthorModal.value = true;
-              }
+          // 免密直登：首次进入时记录本地状态，并按原“首次登录”逻辑决定弹窗
+          function autoLogin() {
+            if (localStorage.getItem(AUTH_KEY) === "1") return;
+            localStorage.setItem(AUTH_KEY, "1");
+            // 若用户尚未见过当前版本，优先打开版本弹窗；否则打开作者碎碎念
+            if (localStorage.getItem("wiki_seen_version") !== VERSION) {
+              showVersionModal.value = true;
             } else {
-              passwordError.value = "密码错误，请重试";
-              passwordInput.value = "";
+              showAuthorModal.value = true;
             }
           }
 
@@ -1914,10 +1888,9 @@
             if (location.hash) {
               handleRoute();
             }
-            // 已登录用户首次进入时，检查是否有新版本（自动打开版本弹窗）
-            if (authenticated.value) {
-              checkVersion();
-            }
+            // 免密直登（首访记录状态），并检查是否有新版本（自动打开版本弹窗）
+            autoLogin();
+            checkVersion();
           });
 
 
@@ -1966,9 +1939,6 @@
             versionLog,
             closeVersionModal,
             authenticated,
-            passwordInput,
-            passwordError,
-            handleLogin,
             showQuizModal,
             quizStep,
             quizQuestions,
