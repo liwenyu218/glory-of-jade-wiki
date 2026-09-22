@@ -1682,6 +1682,12 @@
           function handleArticleClick(e) {
             const t = e.target;
             if (!t || !t.closest(".article-body")) return;
+            // 点击兜底页"返回档案大厅"：显式走 backToList（hash 为空时也能回到列表）
+            if (t.closest(".sf-back")) {
+              e.preventDefault();
+              backToList();
+              return;
+            }
             // 点击 <img>：直接弹窗
             if (t.tagName === "IMG") {
               openImgModal(t.getAttribute("src") || t.src);
@@ -1723,9 +1729,22 @@
               }
             } catch (e) {
               currentContent.value =
-                '<div class="empty"><div class="big-icon">⚠️</div><div class="hint-text">加载失败：' +
-                e.message +
-                "<br><small>需通过 HTTP 服务访问（如 python -m http.server），不能直接双击打开。</small></div></div>";
+                '<div class="secret-fallback">' +
+                '<div class="sf-stamp">绝密</div>' +
+                '<div class="sf-icon">📡</div>' +
+                '<div class="sf-title">前方信号丢失</div>' +
+                '<div class="sf-code">' + (e.message || "UNKNOWN_ERROR") + '</div>' +
+                '<p class="sf-text">档案管理员表示：前方战况太激烈，信号在回传途中丢失。<br>这份档案暂时失联，请勿惊慌，稍后再来支援。</p>' +
+                '<div class="sf-hint"><strong>📋 信号抢修清单</strong><br>' +
+                '① 该档案可能尚未随新版本同步上线，过会儿再来试试；<br>' +
+                '② 仍失联请火速联系馆长（赛博史官本人）。</div>' +
+                '<a class="sf-back" href="#">← 返回档案大厅</a>' +
+                '</div>';
+              // 失败也落一个稳定路由：刷新/前进后退不会丢状态，返回按钮有明确去处
+              currentRouteKey = routeKey || "";
+              if (routeKey && location.hash !== routeKey) {
+                location.hash = routeKey;
+              }
             }
             loading.value = false;
             // 切换到文章态，回到顶部

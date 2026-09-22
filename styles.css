@@ -1970,4 +1970,119 @@
           padding: 0 16px;
         }
       }
+
+      /* ===== 文件加载失败：绝密档案兜底页 ===== */
+      .secret-fallback {
+        position: relative;
+        overflow: hidden;
+        max-width: 460px;
+        margin: 24px auto;
+        padding: 44px 26px 30px;
+        text-align: center;
+        border: 2px dashed rgba(217, 83, 63, 0.7);
+        border-radius: 16px;
+        background: #fdf6ec;
+      }
+      /* 纸张扫描线纹理 */
+      .secret-fallback::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: repeating-linear-gradient(
+          0deg,
+          rgba(0, 0, 0, 0.03) 0 1px,
+          transparent 1px 4px
+        );
+      }
+      .sf-stamp {
+        position: absolute;
+        top: 16px;
+        right: -4px;
+        z-index: 1;
+        padding: 4px 14px;
+        border: 3px solid rgba(217, 69, 63, 0.75);
+        border-radius: 8px;
+        color: rgba(217, 69, 63, 0.85);
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: 6px;
+        transform: rotate(12deg);
+        animation: sf-stamp-in 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+      }
+      @keyframes sf-stamp-in {
+        from {
+          transform: rotate(12deg) scale(2.6);
+          opacity: 0;
+        }
+        to {
+          transform: rotate(12deg) scale(1);
+          opacity: 1;
+        }
+      }
+      .sf-icon {
+        font-size: 52px;
+        animation: sf-bob 2.4s ease-in-out infinite;
+      }
+      @keyframes sf-bob {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-8px);
+        }
+      }
+      .sf-title {
+        margin-top: 10px;
+        font-size: 19px;
+        font-weight: 700;
+        color: #c0392b;
+        letter-spacing: 2px;
+      }
+      .sf-code {
+        margin-top: 6px;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        color: #d9534f;
+        opacity: 0.8;
+      }
+      .sf-text {
+        margin-top: 12px;
+        font-size: 14px;
+        line-height: 1.9;
+        color: #7a5c3e;
+      }
+      .sf-hint {
+        margin-top: 14px;
+        padding: 12px 14px;
+        text-align: left;
+        font-size: 13px;
+        line-height: 1.9;
+        color: #8a6a4a;
+        background: rgba(217, 83, 63, 0.08);
+        border-radius: 10px;
+      }
+      .sf-hint code {
+        padding: 1px 6px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.06);
+        font-size: 12px;
+      }
+      .secret-fallback .sf-back {
+        display: inline-block;
+        margin-top: 16px;
+        padding: 8px 22px;
+        border-radius: 999px;
+        background: #c0392b;
+        color: #fff;
+        text-decoration: none;
+        font-size: 14px;
+        box-shadow: 0 4px 12px rgba(192, 57, 43, 0.35);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      .secret-fallback .sf-back:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(192, 57, 43, 0.4);
+      }
     
